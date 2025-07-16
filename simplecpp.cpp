@@ -3007,6 +3007,30 @@ static std::string openHeader(std::ifstream &f, const simplecpp::DUI &dui, const
         if (!path.empty())
             return path;
     }
+
+    // a named lambda function to insert the ".framework/Headers" part for apple frameworks
+    auto get_apple_framework_relative_path= [](const std::string& appleFrameworkHeader) -> std::string {
+        // try the Framework path on apple OS, if there is a path in front
+        const size_t slashPos = appleFrameworkHeader.find('/');
+        if (slashPos == std::string::npos) {
+            return appleFrameworkHeader;
+        }
+        constexpr auto frameworkSuffix{ ".framework/Headers" };
+        return appleFrameworkHeader.substr(0, slashPos) + frameworkSuffix + appleFrameworkHeader.substr(slashPos);
+    };
+    // on Apple, try to find the header in the framework path
+    // Convert <includePath>/PKGNAME/myHeader -> <includePath>/PKGNAME.framework/Headers/myHeader
+    // Works on any platform, but only relevant when compiling against Apple SDKs.
+    const std::string appleFrameworkHeader = get_apple_framework_relative_path(header);
+    if (appleFrameworkHeader != header) {
+        for (const auto & includePath: dui.includePaths) {
+            const std::string frameworkCandidatePath = includePath + '/' + appleFrameworkHeader;
+            std::string simplePath = openHeaderDirect(f, simplecpp::simplifyPath(frameworkCandidatePath));
+            if (!simplePath.empty())
+                return simplePath;
+        }
+    }
+
     return "";
 }
 
