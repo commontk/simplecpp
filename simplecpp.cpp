@@ -3502,7 +3502,28 @@ void simplecpp::preprocess(simplecpp::TokenList &output, const simplecpp::TokenL
 
                 const bool systemheader = (inctok->str()[0] == '<');
                 const std::string header(inctok->str().substr(1U, inctok->str().size() - 2U));
-                const FileData *const filedata = cache.get(rawtok->location.file(), header, dui, systemheader, files, outputList).first;
+
+                // First, try normal resolution through the cache
+                const FileData * filedata = cache.get(rawtok->location.file(), header, dui, systemheader, files, outputList).first;
+
+                // Fallback: normal lookup failed. Use openHeader(...), which also handles Apple
+                // frameworks (e.g., "<Foo/Bar.h>" -> "<Foo.framework/Headers/Bar.h>").
+                // If openHeader(...) returns a resolved absolute path, load it via cache.get(...)
+                // with systemheader=false to treat it as a direct file (no system-header semantics)
+                // and outputList=nullptr to avoid emitting a duplicate "missing header" diagnostic
+                if (filedata == nullptr) {
+                    std::ifstream f;
+                    const std::string resolved =
+                        openHeader(f, dui, rawtok->location.file(), header, systemheader);
+                    if (!resolved.empty() && resolved != header) {
+                        filedata = cache.get(rawtok->location.file(),
+                                             resolved,
+                                             dui,
+                                             /*systemheader=*/ false,
+                                             files,
+                                             /*outputList*/ nullptr).first;
+                    }
+                }
                 if (filedata == nullptr) {
                     if (outputList) {
                         simplecpp::Output out(files);

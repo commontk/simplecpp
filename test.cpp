@@ -2141,6 +2141,32 @@ static void circularInclude()
     ASSERT_EQUALS("", toString(outputList));
 }
 
+static void appleFrameworkIncludeTest()
+{
+    // This test checks Apple framework include handling.
+    //
+    // If -I /tmp/testFrameworks
+    // and we write:
+    //   #include <Foundation/Foundation.h>
+    //
+    // then simplecpp should find:
+    //   ./testsuite/Foundation.framework/Headers/Foundation.h
+    const char code[] = "#include <Foundation/Foundation.h>\n";
+    std::vector<std::string> files;
+    const simplecpp::TokenList rawtokens = makeTokenList(code, files, "sourcecode.cpp");
+    simplecpp::FileDataCache cache;
+    simplecpp::TokenList tokens2(files);
+    simplecpp::DUI dui;
+#ifdef SIMPLECPP_SOURCE_DIR
+    dui.includePaths.push_back(std::string(SIMPLECPP_SOURCE_DIR) + "/testsuite");
+#else
+    dui.includePaths.push_back("./testsuite");
+#endif
+    simplecpp::OutputList outputList;
+    simplecpp::preprocess(tokens2, rawtokens, files, cache, dui, &outputList);
+    ASSERT_EQUALS("", toString(outputList));
+}
+
 static void appleFrameworkHasIncludeTest()
 {
     const char code[] =
@@ -3400,6 +3426,7 @@ int main(int argc, char **argv)
     TEST_CASE(nestedInclude);
     TEST_CASE(systemInclude);
     TEST_CASE(circularInclude);
+    TEST_CASE(appleFrameworkIncludeTest);
     TEST_CASE(appleFrameworkHasIncludeTest);
 
     TEST_CASE(nullDirective1);
