@@ -13,6 +13,7 @@
 #include "simplecpp.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cctype>
 #include <climits>
@@ -2432,16 +2433,18 @@ static bool isAbsolutePath(const std::string &path)
 #endif
 
 namespace {
-    // "<Pkg/Hdr.h>" -> "<Pkg.framework/Headers/Hdr.h>"
-    inline std::string
-    toAppleFrameworkRelative(const std::string& header)
+    // "<Pkg/Hdr.h>" -> "<Pkg.framework/Headers/Hdr.h>" (and PrivateHeaders variant).
+    // Returns candidates in priority order (Headers, then PrivateHeaders).
+    inline std::array<std::string,2>
+    toAppleFrameworkRelatives(const std::string& header)
     {
         const std::size_t slash = header.find('/');
         if (slash == std::string::npos)
-            return header; // no transformation applicable
+            return { header, header }; // no transformation applicable
         const std::string pkg = header.substr(0, slash);
         const std::string tail = header.substr(slash); // includes '/'
-        return pkg + ".framework/Headers" + tail;
+        return { pkg + ".framework/Headers" + tail,
+                 pkg + ".framework/PrivateHeaders" + tail };
     }
 }
 
@@ -3015,23 +3018,34 @@ static std::string openHeader(std::ifstream &f, const simplecpp::DUI &dui, const
         }
     }
 
-    // search the header on the include paths (provided by the flags "-I...")
-    for (const auto &includePath : dui.includePaths) {
-        std::string path = openHeaderDirect(f, simplecpp::simplifyPath(includePath + "/" + header));
-        if (!path.empty())
-            return path;
+    // Build an ordered, typed path list:
+    // - Prefer DUI::searchPaths when provided (interleaved -I/-F/-iframework).
+    // - Otherwise mirror legacy includePaths into Include entries (back-compat).
+    std::vector<simplecpp::DUI::SearchPath> searchPaths;
+    if (!dui.searchPaths.empty()) {
+        searchPaths = dui.searchPaths;
+    } else {
+        searchPaths.reserve(dui.includePaths.size());
+        for (const auto &includePath : dui.includePaths)
+            searchPaths.push_back({includePath, simplecpp::DUI::PathKind::Include});
     }
 
-    // on Apple, try to find the header in the framework path
-    // Convert <includePath>/PKGNAME/myHeader -> <includePath>/PKGNAME.framework/Headers/myHeader
-    // Works on any platform, but only relevant when compiling against Apple SDKs.
-    const std::string appleFrameworkHeader = toAppleFrameworkRelative(header);
-    if (appleFrameworkHeader != header) {
-        for (const auto & includePath: dui.includePaths) {
-            const std::string frameworkCandidatePath = includePath + '/' + appleFrameworkHeader;
-            std::string simplePath = openHeaderDirect(f, simplecpp::simplifyPath(frameworkCandidatePath));
-            if (!simplePath.empty())
-                return simplePath;
+    // Search left-to-right, honoring path kinds.
+    for (const auto &searchPath : searchPaths) {
+        if (searchPath.kind == simplecpp::DUI::PathKind::Include) {
+            const std::string path = openHeaderDirect(f, simplecpp::simplifyPath(searchPath.path + "/" + header));
+            if (!path.empty())
+                return path;
+        } else {
+            // Framework & SystemFramework: try Headers then PrivateHeaders
+            const auto relatives = toAppleFrameworkRelatives(header);
+            if (relatives[0] != header) { // Skip if no framework rewrite was applied.
+                for (const auto &rel : relatives) {
+                    const std::string frameworkPath = openHeaderDirect(f, simplecpp::simplifyPath(searchPath.path + "/" + rel));
+                    if (!frameworkPath.empty())
+                        return frameworkPath;
+                }
+            }
         }
     }
 

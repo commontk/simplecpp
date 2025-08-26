@@ -2157,10 +2157,12 @@ static void appleFrameworkIncludeTest()
     simplecpp::FileDataCache cache;
     simplecpp::TokenList tokens2(files);
     simplecpp::DUI dui;
-#ifdef SIMPLECPP_SOURCE_DIR
-    dui.includePaths.push_back(std::string(SIMPLECPP_SOURCE_DIR) + "/testsuite");
+#ifdef SIMPLECPP_TEST_SOURCE_DIR
+    dui.searchPaths.push_back({std::string(SIMPLECPP_TEST_SOURCE_DIR) + "/testsuite",
+                               simplecpp::DUI::PathKind::Framework
+                              });
 #else
-    dui.includePaths.push_back("./testsuite");
+    dui.searchPaths.push_back({"./testsuite", simplecpp::DUI::PathKind::Framework});
 #endif
     simplecpp::OutputList outputList;
     simplecpp::preprocess(tokens2, rawtokens, files, cache, dui, &outputList);
@@ -2185,9 +2187,11 @@ static void appleFrameworkHasIncludeTest()
     simplecpp::TokenList tokens2(files);
     simplecpp::DUI dui;
 #ifdef SIMPLECPP_TEST_SOURCE_DIR
-    dui.includePaths.push_back(std::string(SIMPLECPP_TEST_SOURCE_DIR) + "/testsuite");
+    dui.searchPaths.push_back({std::string(SIMPLECPP_TEST_SOURCE_DIR) + "/testsuite",
+                               simplecpp::DUI::PathKind::Framework
+                              });
 #else
-    dui.includePaths.push_back("./testsuite");
+    dui.searchPaths.push_back({"./testsuite", simplecpp::DUI::PathKind::Framework});
 #endif
     dui.std = "c++17"; // enable __has_include
 
