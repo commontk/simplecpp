@@ -2431,6 +2431,20 @@ static bool isAbsolutePath(const std::string &path)
 }
 #endif
 
+namespace {
+    // "<Pkg/Hdr.h>" -> "<Pkg.framework/Headers/Hdr.h>"
+    inline std::string
+    toAppleFrameworkRelative(const std::string& header)
+    {
+        const std::size_t slash = header.find('/');
+        if (slash == std::string::npos)
+            return header; // no transformation applicable
+        const std::string pkg = header.substr(0, slash);
+        const std::string tail = header.substr(slash); // includes '/'
+        return pkg + ".framework/Headers" + tail;
+    }
+}
+
 namespace simplecpp {
     /**
      * perform path simplifications for . and ..
@@ -3008,20 +3022,10 @@ static std::string openHeader(std::ifstream &f, const simplecpp::DUI &dui, const
             return path;
     }
 
-    // a named lambda function to insert the ".framework/Headers" part for apple frameworks
-    auto get_apple_framework_relative_path= [](const std::string& appleFrameworkHeader) -> std::string {
-        // try the Framework path on apple OS, if there is a path in front
-        const size_t slashPos = appleFrameworkHeader.find('/');
-        if (slashPos == std::string::npos) {
-            return appleFrameworkHeader;
-        }
-        constexpr auto frameworkSuffix{ ".framework/Headers" };
-        return appleFrameworkHeader.substr(0, slashPos) + frameworkSuffix + appleFrameworkHeader.substr(slashPos);
-    };
     // on Apple, try to find the header in the framework path
     // Convert <includePath>/PKGNAME/myHeader -> <includePath>/PKGNAME.framework/Headers/myHeader
     // Works on any platform, but only relevant when compiling against Apple SDKs.
-    const std::string appleFrameworkHeader = get_apple_framework_relative_path(header);
+    const std::string appleFrameworkHeader = toAppleFrameworkRelative(header);
     if (appleFrameworkHeader != header) {
         for (const auto & includePath: dui.includePaths) {
             const std::string frameworkCandidatePath = includePath + '/' + appleFrameworkHeader;
